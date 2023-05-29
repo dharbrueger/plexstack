@@ -1,0 +1,130 @@
+version: "3.8"
+services:
+  gluetun:
+    image: qmcgaw/gluetun:v3
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 8888:8888/tcp # HTTP proxy
+      - 8388:8388/tcp # Shadowsocks
+      - 8388:8388/udp # Shadowsocks
+      - 8090:8090 # port for qbittorrent
+      - 9117:9117 # port for jackett
+      - 7878:7878 # port for radarr
+      - 8989:8989 # port for sonarr
+      - 5055:5055 # port for overseerr
+
+    volumes:
+      - /volume1/docker/gluetun:/gluetun
+    environment:
+      - VPN_SERVICE_PROVIDER= #change to your vpn provider
+      - VPN_TYPE= #change to your vpn type
+      - OPENVPN_USER= #change to your vpn username
+      - OPENVPN_PASSWORD= #change to your vpn password
+      - SERVER_REGIONS= #change to your vpn region
+      - TZ= #change to your timezone
+      - HTTPPROXY=on #change to off if you don't wish to enable
+      - SHADOWSOCKS=on #change to off if you don't wish to enable
+      - FIREWALL_OUTBOUND_SUBNETS= #change this in line with your subnet
+    network_mode: synobridge
+    restart: unless-stopped
+
+  # This is from a previous attempt at adding nginx-proxy-manager to the stack,
+  # but wasn't having luck with getting it to work.
+  # Leaving it here cause I wanna try again.
+  # nginx:
+  #   image: 'jc21/nginx-proxy-manager:latest'
+  #   restart: unless-stopped
+  #   ports:
+  #     - 80:80
+  #     - 81:81
+  #     - 443:443
+  #   volumes:
+  #     - /volume1/docker/npm/data:/data
+  #     - /volume1/docker/npm/letsencrypt:/etc/letsencrypt
+  #   network_mode: service:gluetun # run on the vpn network
+  #   depends_on:
+  #     - gluetun
+  #   restart: unless-stopped
+
+  qbittorrent:
+    image: linuxserver/qbittorrent
+    container_name: qbittorrent
+    environment:
+      - PUID= #change to docker user id
+      - PGID=100 #change to docker group id
+      - TZ= #change to your timezone
+      - WEBUI_PORT=8090
+    volumes:
+      - /volume1/docker/qbit:/config
+      - /volume1/data/torrents:/data/torrents
+    network_mode: service:gluetun # run on the vpn network
+    depends_on:
+      - gluetun
+    restart: unless-stopped
+
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    environment:
+      - PUID= #change to docker user id
+      - PGID= #change to docker group id
+      - TZ= #change to your timezone
+      - AUTO_UPDATE=true #optional
+      - RUN_OPTS= #optional
+    volumes:
+      - /volume1/docker/jackett:/config
+    network_mode: service:gluetun # run on the vpn network
+    depends_on:
+      - gluetun
+    restart: unless-stopped
+
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID= #change to docker user id
+      - PGID= #change to docker group id
+      - TZ= #change to your timezone
+    volumes:
+      - /volume1/data/media/Movies:/movies
+      - /volume1/data/torrents/completed:/completed # need to look at how this folder is being used, i think it might not be getting cleared after downloads complete :/
+      - /volume1/docker/radarr:/config
+    network_mode: service:gluetun # run on the vpn network
+    depends_on:
+      - gluetun
+    restart: unless-stopped
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID= #change to docker user id
+      - PGID= #change to docker group id
+      - TZ= #change to your timezone
+    volumes:
+      - /volume1/docker/sonarr:/config
+      - /volume1/data/media/TV:/tv
+      - /volume1/data/media/Anime:/anime
+      - /volume1/data/torrents/completed:/completed
+    network_mode: service:gluetun # run on the vpn network
+    depends_on:
+      - gluetun
+    restart: unless-stopped
+
+  overseerr:
+    image: lscr.io/linuxserver/overseerr:latest
+    container_name: overseerr
+    environment:
+      - PUID= #change to docker user id
+      - PGID= #change to docker group id
+      - TZ= #change to your timezone
+    volumes:
+      - /volume1/docker/overseerr:/config
+    network_mode: service:gluetun # run on the vpn network
+    depends_on:
+      - gluetun
+    restart: unless-stopped
